@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve
 import seaborn as sns
@@ -24,33 +24,43 @@ print("=" * 60)
 df = pd.read_csv('data/patient_features.csv')
 print(f"Загружено пациентов: {len(df)}")
 
-# 2. Отбор признаков и целевой переменной
-# Убираем идентификаторы и целевую переменную из признаков
-feature_cols = [col for col in df.columns if col not in ['insured_id', 'contract_id', 'q2_cost', 'high_risk']]
+# 2. Преобразование категориальных признаков
+df['gender'] = df['gender'].map({'M': 1, 'F': 0})
+le = LabelEncoder()
+df['patient_type_encoded'] = le.fit_transform(df['patient_type'])
+
+# 3. Отбор признаков (убрали is_senior)
+feature_cols = [
+    'gender', 'age', 'patient_type_encoded',
+    'visits_6m', 'visits_12m', 'cost_6m', 'cost_12m', 
+    'avg_cost_6m', 'avg_cost_12m', 'specialist_share'
+] + [col for col in df.columns if col.startswith('visits_') and col not in ['visits_6m', 'visits_12m']]
+
+feature_cols = list(set(feature_cols))
 X = df[feature_cols]
 y = df['high_risk']
 
 print(f"Количество признаков: {len(feature_cols)}")
 print(f"Доля пациентов с высоким риском: {y.mean() * 100:.1f}%")
 
-# 3. Масштабирование признаков (важно для логистической регрессии)
+# 4. Масштабирование
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# 4. Разделение на обучающую и тестовую выборки
+# 5. Разделение
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 
-print(f"Обучающая выборка: {len(X_train)} пациентов")
-print(f"Тестовая выборка: {len(X_test)} пациентов")
+print(f"Обучающая: {len(X_train)} пациентов")
+print(f"Тестовая: {len(X_test)} пациентов")
 
-# 5. Обучение модели
+# 6. Обучение
 model = LogisticRegression(random_state=42, class_weight='balanced', max_iter=1000)
 model.fit(X_train, y_train)
 print("\n✓ Модель обучена")
 
-# 6. Прогноз и оценка
+# 7. Оценка
 y_pred = model.predict(X_test)
 y_proba = model.predict_proba(X_test)[:, 1]
 
@@ -62,7 +72,7 @@ print(classification_report(y_test, y_pred, target_names=['Низкий риск
 roc_auc = roc_auc_score(y_test, y_proba)
 print(f"ROC-AUC: {roc_auc:.3f}")
 
-# 7. Коэффициенты модели (интерпретация)
+# 8. Коэффициенты
 coef_df = pd.DataFrame({
     'feature': feature_cols,
     'coefficient': model.coef_[0]
@@ -71,11 +81,11 @@ coef_df['odds_ratio'] = np.exp(coef_df['coefficient'])
 coef_df = coef_df.sort_values('coefficient', key=abs, ascending=False)
 
 print("\n" + "=" * 50)
-print("ТОП-5 ФАКТОРОВ РИСКА (ПО КОЭФФИЦИЕНТАМ)")
+print("ТОП-5 ФАКТОРОВ РИСКА")
 print("=" * 50)
 print(coef_df.head(5).to_string(index=False))
 
-# 8. Визуализация: ROC-кривая
+# 9. ROC-кривая
 fig, ax = plt.subplots(figsize=(8, 6))
 fpr, tpr, _ = roc_curve(y_test, y_proba)
 ax.plot(fpr, tpr, color=COLORS['primary'], linewidth=2, label=f'ROC-AUC = {roc_auc:.3f}')
@@ -86,9 +96,9 @@ ax.set_title('ROC-кривая (Логистическая регрессия)')
 ax.legend()
 plt.tight_layout()
 plt.savefig('fig_3.2.2.1_logreg_roc.png', dpi=300, bbox_inches='tight')
-print("✓ Рисунок 3.2.2.1 сохранен как 'fig_3.2.2.1_logreg_roc.png'")
+print("✓ Рисунок 3.2.2.1 сохранен")
 
-# 9. Матрица ошибок
+# 10. Матрица ошибок
 fig2, ax2 = plt.subplots(figsize=(6, 5))
 cm = confusion_matrix(y_test, y_pred)
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax2,
@@ -97,6 +107,6 @@ sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax2,
 ax2.set_title('Матрица ошибок (Логистическая регрессия)')
 plt.tight_layout()
 plt.savefig('fig_3.2.2.2_logreg_cm.png', dpi=300, bbox_inches='tight')
-print("✓ Рисунок 3.2.2.2 сохранен как 'fig_3.2.2.2_logreg_cm.png'")
+print("✓ Рисунок 3.2.2.2 сохранен")
 
 print("\nГОТОВО!")
